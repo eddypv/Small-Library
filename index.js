@@ -1,6 +1,7 @@
 import  {ApolloServer, gql} from 'apollo-server'
 import authors from './Data/authors.js'
 import books from './Data/books.js'
+import {v1 as uuidv1, v1} from 'uuid'
 
 const typeDefs = gql `
   type Book{
@@ -22,6 +23,9 @@ const typeDefs = gql `
       allBooks(author:String genre:String!):[Book!]!
       allAuthors:[Author]!
   }
+  type Mutation{
+      addBook(title:String! author:String! published:Int genres:[String!]!):Book
+  }
 `
 const resolvers = {
     Query:{
@@ -41,6 +45,22 @@ const resolvers = {
             return booksFiltered
         } ,
         allAuthors:()  => authors
+    },
+    Mutation:{
+        addBook:(root, args) =>{
+            const newBook = {...args}
+            const author = authors.find(element => element.name == newBook.author) 
+            console.log(author)
+            if(author == undefined)
+                authors.push({
+                    name: newBook.author,
+                    id: uuidv1(),
+                    born: null,
+                })
+            books.push(newBook)
+            return newBook
+
+        }
     },
     Author:{
         bookCount:(root)=>{
