@@ -21,7 +21,7 @@ const typeDefs = gql `
   type Query {
       bookCount:Int!
       authorCount:Int!
-      allBooks(author:String genre:String!):[Book!]!
+      allBooks(author:String genre:String):[Book!]!
       allAuthors:[Author]!
   }
   type Mutation{
@@ -35,13 +35,13 @@ const resolvers = {
         authorCount:() => authors.length,
         allBooks:(root, args) =>{
             const {author, genre} = args
-            console.log(author, genre)
+            
             let booksFiltered =[]
-            if(author){
-                booksFiltered =books.filter(book => book.author == author && book.genres.some(element => element== genre))
+            if(author && genre){
+                booksFiltered =books.filter(book => (author== undefined || book.author == author) && (genre == undefined || book.genres.some(element => element== genre)))
             }
             else{
-                booksFiltered =books.filter(book => book.genres.some(element => element== genre)) 
+                booksFiltered =books
             }
             
             return booksFiltered
@@ -50,7 +50,7 @@ const resolvers = {
     },
     Mutation:{
         addBook:(root, args) =>{
-            const newBook = {...args}
+            const newBook = {...args, id:uuidv1()}
             const author = authors.find(element => element.name == newBook.author) 
             console.log(author)
             if(author == undefined)
