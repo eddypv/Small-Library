@@ -1,7 +1,14 @@
+import dotenv from 'dotenv';
+dotenv.config()
 import  {ApolloServer, gql} from 'apollo-server'
 import authorsData from './Data/authors.js'
 import booksData from './Data/books.js'
+import author from './models/author.js'
+import book from './models/book.js'
 import {v1 as uuidv1, v1} from 'uuid'
+import connectdb from './models/db.js'
+
+connectdb();
 let authors = authorsData
 let books = booksData
 const typeDefs = gql `
