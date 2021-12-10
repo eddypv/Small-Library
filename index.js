@@ -3,19 +3,20 @@ dotenv.config()
 import  {ApolloServer, gql} from 'apollo-server'
 import authorsData from './Data/authors.js'
 import booksData from './Data/books.js'
-import author from './models/author.js'
-import book from './models/book.js'
+import Author from './models/author.js'
+import Book from './models/book.js'
 import {v1 as uuidv1, v1} from 'uuid'
 import connectdb from './models/db.js'
 
 connectdb();
+
 let authors = authorsData
 let books = booksData
 const typeDefs = gql `
   type Book{
       title:String!
       published:Int!
-      author:String!
+      author:Author!
       id:ID!
       genres:[String!]!
   }
@@ -38,36 +39,41 @@ const typeDefs = gql `
 `
 const resolvers = {
     Query:{
-        bookCount:() => books.length,
-        authorCount:() => authors.length,
-        allBooks:(root, args) =>{
+        bookCount:async () => await Book.countDocuments(),
+        authorCount:async() => await Author.countDocuments(),
+        allBooks:async (root, args) =>{
             const {author, genre} = args
+            let filters = {}
+            let allBooks = []
+            if(author)
+                filters['author.name'] =author
+            if(genre)
+                filters['genres'] =[genre]
             
-            let booksFiltered =[]
-            if(author && genre){
-                booksFiltered =books.filter(book => (author== undefined || book.author == author) && (genre == undefined || book.genres.some(element => element== genre)))
-            }
-            else{
-                booksFiltered =books
-            }
-            
-            return booksFiltered
+            return Book.find(filters).populate("author").exec()
         } ,
         allAuthors:()  => authors
     },
     Mutation:{
-        addBook:(root, args) =>{
-            const newBook = {...args, id:uuidv1()}
-            const author = authors.find(element => element.name == newBook.author) 
+        addBook:async (root, args) =>{
+            let authorId = ""
+            console.log(args)
+            const author = await Author.findOne({name :args.author} )
             console.log(author)
-            if(author == undefined)
-                authors.push({
-                    name: newBook.author,
-                    id: uuidv1(),
+            if(author)
+            {
+                authorId = author._id
+            }
+            else{
+                const newAuthor = new Author({
+                    name: args.author,
                     born: null,
                 })
-            books.push(newBook)
-            return newBook
+                newAuthor.save()
+                authorId = newAuthor._id;
+            }
+            const newBook = new Book({...args, author:authorId})
+            return  newBook.save()
 
         },
         editAuthor:(root, args) => {
