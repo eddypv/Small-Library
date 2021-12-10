@@ -1,17 +1,14 @@
 import dotenv from 'dotenv';
 dotenv.config()
 import  {ApolloServer, gql, UserInputError} from 'apollo-server'
-import authorsData from './Data/authors.js'
-import booksData from './Data/books.js'
 import Author from './models/author.js'
 import Book from './models/book.js'
-import {v1 as uuidv1, v1} from 'uuid'
+
 import connectdb from './models/db.js'
 
 connectdb();
 
-let authors = authorsData
-let books = booksData
+
 const typeDefs = gql `
   type Book{
       title:String!
@@ -26,25 +23,46 @@ const typeDefs = gql `
       born:Int
       bookCount:Int!
   }
+  type User {
+    username: String!
+    favoriteGenre: String!
+    id: ID!
+  }
+  
+  type Token {
+    value: String!
+  }
+  
   type Query {
       bookCount:Int!
       authorCount:Int!
       allBooks(author:String genre:String):[Book!]!
       allAuthors:[Author]!
+      me: User
   }
   type Mutation{
       addBook(title:String! author:String! published:Int! genres:[String!]!):Book
+
       editAuthor(name:String! setBornTo:Int!):Author
+
+      createUser(
+        username: String!
+        favoriteGenre: String!
+      ): User
+
+      login(
+        username: String!
+        password: String!
+      ): Token
   }
 `
 const resolvers = {
     Query:{
         bookCount:async () => await Book.countDocuments(),
         authorCount:async() => await Author.countDocuments(),
-        allBooks:async (root, args) =>{
+        allBooks:async ( args) =>{
             const {author, genre} = args
             let filters = {}
-            let allBooks = []
             if(author)
                 filters['author'] =author
             if(genre)
@@ -55,7 +73,7 @@ const resolvers = {
         allAuthors:async ()  => await Author.find({})
     },
     Mutation:{
-        addBook:async (root, args) =>{
+        addBook:async (args) =>{
             let authorId = ""
             try{
                 const author = await Author.findOne({name :args.author} )
@@ -77,20 +95,15 @@ const resolvers = {
                 
                 return  await Book.findById(savedBook._id).populate("author")
             }catch(error){
-                
                 throw new UserInputError(error.message, {
                     invalidArgs:args
                 })
-
             }
-            
-
         },
         editAuthor:async(root, args) => {
             const {name, setBornTo} = args
             const result = await Author.findOneAndUpdate({name:name}, {born:setBornTo},{new:true})
-            return result
-            
+            return result   
         }
     },
     Author:{
