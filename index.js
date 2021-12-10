@@ -4,7 +4,7 @@ import  {ApolloServer, gql, UserInputError} from 'apollo-server'
 import Author from './models/author.js'
 import Book from './models/book.js'
 import User from './models/user.js'
-
+import jwt from 'jsonwebtoken'
 import connectdb from './models/db.js'
 import user from './models/user.js';
 
@@ -62,7 +62,7 @@ const resolvers = {
     Query:{
         bookCount:async () => await Book.countDocuments(),
         authorCount:async() => await Author.countDocuments(),
-        allBooks:async ( args) =>{
+        allBooks:async ( root,args) =>{
             const {author, genre} = args
             let filters = {}
             if(author)
@@ -75,7 +75,7 @@ const resolvers = {
         allAuthors:async ()  => await Author.find({})
     },
     Mutation:{
-        addBook:async (args) =>{
+        addBook:async (root, args) =>{
             let authorId = ""
             try{
                 const author = await Author.findOne({name :args.author} )
@@ -115,11 +115,27 @@ const resolvers = {
             }catch(error){
                 throw new UserInputError(error.message)
             }
+        },
+        login:async(root, args)=>{
+            const {username, password} = args
+            const user = await User.findOne({username:username})
+            const secret = process.env.JWT_SECRET 
+            if(user && password=="secret"){
+                const userForToken = {
+                    user:username,
+                    id:user._id
+                }
+                const token =jwt.sign(userForToken, secret);
+                return {value:token}
+            }
+            
+            return null
         }
+
     },
     Author:{
         bookCount:async(root)=>{
-            const count= await Book.count({'author':root.id});
+            const count= await Book.count({'author':root.id}); 
             return count
         }
     }
