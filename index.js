@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config()
-import  {ApolloServer, gql} from 'apollo-server'
+import  {ApolloServer, gql, UserInputError} from 'apollo-server'
 import authorsData from './Data/authors.js'
 import booksData from './Data/books.js'
 import Author from './models/author.js'
@@ -33,7 +33,7 @@ const typeDefs = gql `
       allAuthors:[Author]!
   }
   type Mutation{
-      addBook(title:String! author:String! published:Int genres:[String!]!):Book
+      addBook(title:String! author:String! published:Int! genres:[String!]!):Book
       editAuthor(name:String! setBornTo:Int!):Author
   }
 `
@@ -46,55 +46,56 @@ const resolvers = {
             let filters = {}
             let allBooks = []
             if(author)
-                filters['author.name'] =author
+                filters['author'] =author
             if(genre)
                 filters['genres'] =[genre]
             
             return Book.find(filters).populate("author").exec()
         } ,
-        allAuthors:()  => authors
+        allAuthors:async ()  => await Author.find({})
     },
     Mutation:{
         addBook:async (root, args) =>{
             let authorId = ""
-            console.log(args)
-            const author = await Author.findOne({name :args.author} )
-            console.log(author)
-            if(author)
-            {
-                authorId = author._id
-            }
-            else{
-                const newAuthor = new Author({
-                    name: args.author,
-                    born: null,
+            try{
+                const author = await Author.findOne({name :args.author} )
+                
+                if(author)
+                {
+                    authorId = author._id
+                }
+                else{
+                    const newAuthor = new Author({
+                        name: args.author,
+                        born: null,
+                    })
+                    newAuthor.save()
+                    authorId = newAuthor._id;
+                }
+                const newBook = new Book({...args, author:authorId})
+                const savedBook = await newBook.save()
+                
+                return  await Book.findById(savedBook._id).populate("author")
+            }catch(error){
+                
+                throw new UserInputError(error.message, {
+                    invalidArgs:args
                 })
-                newAuthor.save()
-                authorId = newAuthor._id;
+
             }
-            const newBook = new Book({...args, author:authorId})
-            return  newBook.save()
+            
 
         },
-        editAuthor:(root, args) => {
+        editAuthor:async(root, args) => {
             const {name, setBornTo} = args
-            let author = authors.find(element => element.name == name);
-            if(author == undefined)
-                return null 
-            authors= authors.map(element=> {
-                if(element.name == name){
-                    element.born = setBornTo
-                    author = element
-                }
-                    
-                return element
-            })
-            return author
+            const result = await Author.findOneAndUpdate({name:name}, {born:setBornTo},{new:true})
+            return result
+            
         }
     },
     Author:{
-        bookCount:(root)=>{
-            const count= books.filter(element => element.author == root.name).length;
+        bookCount:async(root)=>{
+            const count= await Book.count({'author':root.id});
             return count
         }
     }
