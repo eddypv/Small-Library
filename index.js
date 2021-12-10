@@ -3,8 +3,10 @@ dotenv.config()
 import  {ApolloServer, gql, UserInputError} from 'apollo-server'
 import Author from './models/author.js'
 import Book from './models/book.js'
+import User from './models/user.js'
 
 import connectdb from './models/db.js'
+import user from './models/user.js';
 
 connectdb();
 
@@ -104,6 +106,15 @@ const resolvers = {
             const {name, setBornTo} = args
             const result = await Author.findOneAndUpdate({name:name}, {born:setBornTo},{new:true})
             return result   
+        },
+        createUser:async(root,args)=>{
+            try {
+                const newUser = new User({...args})
+                const savedUser = await newUser.save();
+                return await User.findById(savedUser.id)
+            }catch(error){
+                throw new UserInputError(error.message)
+            }
         }
     },
     Author:{
