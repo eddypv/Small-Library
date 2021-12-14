@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config()
-import  {ApolloServer, gql, UserInputError} from 'apollo-server'
+import  {ApolloServer, gql, UserInputError, AuthenticationError} from 'apollo-server'
 import Author from './models/author.js'
 import Book from './models/book.js'
 import User from './models/user.js'
@@ -72,13 +72,19 @@ const resolvers = {
             
             return Book.find(filters).populate("author").exec()
         } ,
-        allAuthors:async ()  => await Author.find({})
+        allAuthors:async ()  => await Author.find({}),
+        me:(root, args, context)=>{
+          return context.currentUser;
+        }
     },
     Mutation:{
-        addBook:async (root, args) =>{
+        addBook:async (root, args, context) =>{
             let authorId = ""
             try{
                 const author = await Author.findOne({name :args.author} )
+                if(!context.currentUser){
+                  throw new AuthenticationError("No authenticated")
+                }
                 
                 if(author)
                 {
@@ -102,8 +108,11 @@ const resolvers = {
                 })
             }
         },
-        editAuthor:async(root, args) => {
+        editAuthor:async(root, args, context) => {
             const {name, setBornTo} = args
+            if(!context.currentUser){
+              throw new AuthenticationError("No authenticated")
+            }
             const result = await Author.findOneAndUpdate({name:name}, {born:setBornTo},{new:true})
             return result   
         },
@@ -142,7 +151,19 @@ const resolvers = {
 
 }
 
-const server = new ApolloServer({typeDefs, resolvers});
+const server = new ApolloServer({
+  typeDefs, 
+  resolvers,
+  context:async({req}) =>{
+    const auth = req ? req.headers.authorization : null 
+    if(auth && auth.toLowerCase().startsWith('bearer ')){
+      const decodedToken = jwt.verify(auth.substring(7), process.env.JWT_SECRET);
+      const currentUser = await User.findById(decodedToken.id)
+      return {currentUser}
+    }
+
+  } 
+});
 server.listen().then(({url})=>{
     console.log(`Server running at ${url}`)
 })
