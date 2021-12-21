@@ -103,11 +103,14 @@ const resolvers = {
                 if(author)
                 {
                     authorId = author._id
+                    author.bookCount =  author.bookCount+1
+                    await author.save();
                 }
                 else{
                     const newAuthor = new Author({
                         name: args.author,
                         born: null,
+                        bookCount:1
                     })
                     newAuthor.save()
                     authorId = newAuthor._id;
@@ -161,12 +164,6 @@ const resolvers = {
       bookAdded:{
         subscribe:()=>pubsub.asyncIterator(["BOOK_ADDED"])
       }
-    },
-    Author:{
-        bookCount:async(root)=>{
-            const count= await Book.count({'author':root.id}); 
-            return count
-        }
     }
 
 }
