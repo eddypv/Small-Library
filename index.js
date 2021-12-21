@@ -1,14 +1,24 @@
 import dotenv from 'dotenv';
 dotenv.config()
-import  {ApolloServer, gql, UserInputError, AuthenticationError} from 'apollo-server'
+import  {ApolloServer, gql, UserInputError, AuthenticationError} from 'apollo-server-express'
+import {createServer} from 'http'
+import express, { response } from 'express'
+import {execute, subscribe} from 'graphql' 
+import { SubscriptionServer } from 'subscriptions-transport-ws';
 import Author from './models/author.js'
 import Book from './models/book.js'
 import User from './models/user.js'
 import jwt from 'jsonwebtoken'
 import connectdb from './models/db.js'
 import user from './models/user.js';
+import {PubSub} from 'graphql-subscriptions'
+import { makeExecutableSchema } from '@graphql-tools/schema'; 
 
 connectdb();
+const PORT=4000
+const  pubsub = new PubSub()
+const app = express()
+const httpServer = createServer(app)
 
 
 const typeDefs = gql `
@@ -57,6 +67,9 @@ const typeDefs = gql `
         password: String!
       ): Token
   }
+  type Subscription{
+    bookAdded:Book!
+  }
 `
 const resolvers = {
     Query:{
@@ -81,6 +94,7 @@ const resolvers = {
         addBook:async (root, args, context) =>{
             let authorId = ""
             try{
+
                 const author = await Author.findOne({name :args.author} )
                 if(!context.currentUser){
                   throw new AuthenticationError("No authenticated")
@@ -99,9 +113,10 @@ const resolvers = {
                     authorId = newAuthor._id;
                 }
                 const newBook = new Book({...args, author:authorId})
-                const savedBook = await newBook.save()
-                
-                return  await Book.findById(savedBook._id).populate("author")
+                const savedBook = await newBook.save()                
+                const response=  await Book.findById(savedBook._id).populate("author")
+                pubsub.publish("BOOK_ADDED", {bookAdded: response})
+                return response
             }catch(error){
                 throw new UserInputError(error.message, {
                     invalidArgs:args
@@ -142,6 +157,11 @@ const resolvers = {
         }
 
     },
+    Subscription:{
+      bookAdded:{
+        subscribe:()=>pubsub.asyncIterator(["BOOK_ADDED"])
+      }
+    },
     Author:{
         bookCount:async(root)=>{
             const count= await Book.count({'author':root.id}); 
@@ -150,10 +170,9 @@ const resolvers = {
     }
 
 }
-
+const schema = makeExecutableSchema({typeDefs, resolvers})
 const server = new ApolloServer({
-  typeDefs, 
-  resolvers,
+  schema,
   context:async({req}) =>{
     const auth = req ? req.headers.authorization : null 
     if(auth && auth.toLowerCase().startsWith('bearer ')){
@@ -164,6 +183,17 @@ const server = new ApolloServer({
 
   } 
 });
-server.listen().then(({url})=>{
-    console.log(`Server running at ${url}`)
+await server.start()
+server.applyMiddleware({app})
+SubscriptionServer.create(
+  {schema, execute, subscribe},
+  {server:httpServer, path:server.graphqlPath}
+)
+httpServer.listen(PORT, ()=>{
+  console.log(
+    `🚀 Query endpoint ready at http://localhost:${PORT}${server.graphqlPath}`
+  );
+  console.log(
+    `🚀 Subscription endpoint ready at ws://localhost:${PORT}${server.graphqlPath}`
+  );
 })
